@@ -4,8 +4,17 @@
 #include "pch.h"
 #include "framework.h"
 #include "WindowsApp1.h"
+#include <windows.h>
+#include<stdlib.h>
+#include <stdio.h>
+#include <cstdlib>
+#include <string>
+#include <shobjidl.h>
 
 #define MAX_LOADSTRING 100
+
+std::string sSelectedFile;
+std::string sFilePath;
 
 // Global Variables:
 HINSTANCE hInst;                                // current instance
@@ -27,7 +36,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     // TODO: Place code here.
-
+    
     // Initialize global strings
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     LoadStringW(hInstance, IDC_WINDOWSAPP1, szWindowClass, MAX_LOADSTRING);
@@ -112,6 +121,83 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    return TRUE;
 }
 
+// Open file from explorer
+bool openFile()
+{
+    //  CREATE FILE OBJECT INSTANCE
+    HRESULT f_SysHr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (FAILED(f_SysHr))
+        return FALSE;
+
+    // CREATE FileOpenDialog OBJECT
+    IFileOpenDialog* f_FileSystem;
+    f_SysHr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**>(&f_FileSystem));
+    if (FAILED(f_SysHr)) {
+        CoUninitialize();
+        return FALSE;
+    }
+
+    //  SHOW OPEN FILE DIALOG WINDOW
+    f_SysHr = f_FileSystem->Show(NULL);
+    if (FAILED(f_SysHr)) {
+        f_FileSystem->Release();
+        CoUninitialize();
+        return FALSE;
+    }
+
+    //  RETRIEVE FILE NAME FROM THE SELECTED ITEM
+    IShellItem* f_Files;
+    f_SysHr = f_FileSystem->GetResult(&f_Files);
+    if (FAILED(f_SysHr)) {
+        f_FileSystem->Release();
+        CoUninitialize();
+        return FALSE;
+    }
+
+    //  STORE AND CONVERT THE FILE NAME
+    PWSTR f_Path;
+    f_SysHr = f_Files->GetDisplayName(SIGDN_FILESYSPATH, &f_Path);
+    if (FAILED(f_SysHr)) {
+        f_Files->Release();
+        f_FileSystem->Release();
+        CoUninitialize();
+        return FALSE;
+    }
+
+    //  FORMAT AND STORE THE FILE PATH
+    std::wstring path(f_Path);
+    std::string c(path.begin(), path.end());
+    sFilePath = c;
+
+    //  FORMAT STRING FOR EXECUTABLE NAME
+    const size_t slash = sFilePath.find_last_of("/\\");
+    sSelectedFile = sFilePath.substr(slash + 1);
+
+    //  SUCCESS, CLEAN UP
+    CoTaskMemFree(f_Path);
+    f_Files->Release();
+    f_FileSystem->Release();
+    CoUninitialize();
+    return TRUE;
+}
+
+bool result = FALSE;
+int main()
+{
+    result = openFile();
+    switch (result) {
+    case(TRUE): {
+        printf("SELECTED FILE: %s\nFILE PATH: %s\n\n", sSelectedFile.c_str(), sFilePath.c_str());
+        system("pause");
+    }
+    case(FALSE): {
+        printf("ENCOUNTERED AN ERROR: (%d)\n", GetLastError());
+        system("pause");
+    }
+    }
+    return 0;
+}
+
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -138,6 +224,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case IDM_EXIT:
                 DestroyWindow(hWnd);
                 break;
+            case ID_HELP_WEBSITE:
+                system("START https://example.com");
+                break;
+            case ID_FILE_OPEN:
+                openFile();
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
             }
